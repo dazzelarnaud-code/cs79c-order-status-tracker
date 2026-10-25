@@ -1,6 +1,6 @@
 # AWS Architecture Portfolio Project
 
-Daz Arnaud. CS 79C. October 25, 2026.
+Daz Arnaud. CS 79C. October 25, 2026. Public repository: https://github.com/dazzelarnaud-code/cs79c-order-status-tracker
 
 ## Executive summary
 
