@@ -1,0 +1,218 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CS 79C sample order status API with event delivery and monitoring.
+Resources:
+  OrdersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'cs79c-final-orders-${AWS::StackName}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: orderId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: orderId
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Course
+          Value: CS79C
+  OrderEventsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'cs79c-final-events-${AWS::StackName}'
+      MessageRetentionPeriod: 86400
+  NewOrderTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'cs79c-final-new-order-${AWS::StackName}'
+  QueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref OrderEventsQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sns.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt OrderEventsQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref NewOrderTopic
+  QueueSubscription:
+    Type: AWS::SNS::Subscription
+    DependsOn: QueuePolicy
+    Properties:
+      Protocol: sqs
+      Endpoint: !GetAtt OrderEventsQueue.Arn
+      TopicArn: !Ref NewOrderTopic
+      RawMessageDelivery: true
+  FunctionLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/cs79c-final-orders-${AWS::StackName}'
+      RetentionInDays: 3
+  FunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: orders-limited-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                Resource: !GetAtt OrdersTable.Arn
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref NewOrderTopic
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt FunctionLogs.Arn
+  OrdersFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: FunctionLogs
+    Properties:
+      FunctionName: !Sub 'cs79c-final-orders-${AWS::StackName}'
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt FunctionRole.Arn
+      MemorySize: 256
+      Timeout: 10
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref OrdersTable
+          TOPIC_ARN: !Ref NewOrderTopic
+      Code:
+        ZipFile: |
+          import json
+          import os
+          import uuid
+          from datetime import datetime, timezone
+          import boto3
+          from botocore.exceptions import ClientError
+
+          table = boto3.resource('dynamodb').Table(os.environ['TABLE_NAME'])
+          sns = boto3.client('sns')
+          PROJECT = 'Daz Arnaud, CS 79C Final Project'
+
+          def response(status, body):
+              return {'statusCode': status,
+                      'headers': {'content-type': 'application/json'},
+                      'body': json.dumps({'project': PROJECT, **body})}
+
+          def handler(event, context):
+              method = event.get('requestContext', {}).get('http', {}).get('method')
+              if method == 'POST':
+                  try:
+                      data = json.loads(event.get('body') or '{}')
+                  except json.JSONDecodeError:
+                      return response(400, {'error': 'Body must be valid JSON.'})
+                  if not isinstance(data, dict):
+                      return response(400, {'error': 'Body must be a JSON object.'})
+                  name = data.get('itemName')
+                  if not isinstance(name, str) or not 1 <= len(name.strip()) <= 80:
+                      return response(400, {'error': 'itemName must have 1 to 80 characters.'})
+                  order = {'orderId': str(uuid.uuid4()), 'itemName': name.strip(),
+                           'status': 'received',
+                           'createdAt': datetime.now(timezone.utc).isoformat()}
+                  try:
+                      table.put_item(Item=order,
+                                     ConditionExpression='attribute_not_exists(orderId)')
+                      sns.publish(TopicArn=os.environ['TOPIC_ARN'],
+                                  Message=json.dumps({'orderId': order['orderId'],
+                                                      'status': order['status']}),
+                                  Subject='Sample order created')
+                  except ClientError:
+                      return response(500, {'error': 'The order service is unavailable.'})
+                  return response(201, order)
+              if method == 'GET':
+                  order_id = (event.get('pathParameters') or {}).get('orderId', '')
+                  if not order_id:
+                      return response(400, {'error': 'An order ID is required.'})
+                  try:
+                      order = table.get_item(Key={'orderId': order_id}).get('Item')
+                  except ClientError:
+                      return response(500, {'error': 'The order service is unavailable.'})
+                  return response(200, order) if order else response(404, {'error': 'Order not found.'})
+              return response(405, {'error': 'Method not allowed.'})
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub 'cs79c-final-api-${AWS::StackName}'
+      ProtocolType: HTTP
+  ApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt OrdersFunction.Arn
+      PayloadFormatVersion: '2.0'
+  PostOrdersRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: 'POST /orders'
+      Target: !Sub 'integrations/${ApiIntegration}'
+  GetOrderRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: 'GET /orders/{orderId}'
+      Target: !Sub 'integrations/${ApiIntegration}'
+  DefaultStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: '$default'
+      AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 2
+        ThrottlingRateLimit: 1
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref OrdersFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*'
+  FunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'cs79c-final-function-errors-${AWS::StackName}'
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref OrdersFunction
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+Outputs:
+  ApiBaseUrl:
+    Description: Public HTTPS API base URL for sample data only.
+    Value: !GetAtt HttpApi.ApiEndpoint
+  QueueUrl:
+    Description: Queue URL for checking the SNS event.
+    Value: !Ref OrderEventsQueue
+  TableName:
+    Value: !Ref OrdersTable
+  TopicArn:
+    Value: !Ref NewOrderTopic
