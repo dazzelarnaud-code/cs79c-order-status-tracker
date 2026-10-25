@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 500" role="img" aria-labelledby="title desc">
+  <title id="title">Sample order status tracker architecture</title>
+  <desc id="desc">A browser calls API Gateway over HTTPS. API Gateway invokes Lambda. Lambda stores orders in DynamoDB and publishes an event to SNS. SNS delivers the event to SQS. Lambda sends logs and metrics to CloudWatch.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#304f68"/>
+    </marker>
+    <style>
+      text { font-family: Arial, sans-serif; fill: #172b3b; }
+      .title { font-size: 23px; font-weight: 700; }
+      .label { font-size: 18px; font-weight: 700; text-anchor: middle; }
+      .small { font-size: 13px; text-anchor: middle; }
+      .box { fill: #eff5f9; stroke: #315c78; stroke-width: 2; rx: 12; }
+      .event { fill: #f6f0ff; stroke: #6b4d99; }
+      .line { fill: none; stroke: #304f68; stroke-width: 2.4; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect width="1040" height="500" fill="#ffffff"/>
+  <text x="32" y="45" class="title">CS 79C sample order status tracker</text>
+  <rect class="box" x="35" y="135" width="145" height="90"/>
+  <text class="label" x="107" y="172">Browser</text>
+  <text class="small" x="107" y="197">sample requests</text>
+  <rect class="box" x="245" y="135" width="155" height="90"/>
+  <text class="label" x="322" y="172">API Gateway</text>
+  <text class="small" x="322" y="197">HTTPS routes</text>
+  <rect class="box" x="465" y="135" width="150" height="90"/>
+  <text class="label" x="540" y="172">Lambda</text>
+  <text class="small" x="540" y="197">validates requests</text>
+  <rect class="box" x="720" y="60" width="190" height="90"/>
+  <text class="label" x="815" y="96">DynamoDB</text>
+  <text class="small" x="815" y="121">order records</text>
+  <rect class="box event" x="700" y="225" width="140" height="90"/>
+  <text class="label" x="770" y="262">SNS</text>
+  <text class="small" x="770" y="287">new-order event</text>
+  <rect class="box event" x="885" y="225" width="120" height="90"/>
+  <text class="label" x="945" y="262">SQS</text>
+  <text class="small" x="945" y="287">event queue</text>
+  <rect class="box" x="445" y="345" width="190" height="90"/>
+  <text class="label" x="540" y="382">CloudWatch</text>
+  <text class="small" x="540" y="407">logs and alarm</text>
+  <path class="line" d="M180 180 H245"/>
+  <path class="line" d="M400 180 H465"/>
+  <path class="line" d="M615 155 L720 105"/>
+  <path class="line" d="M615 198 L700 257"/>
+  <path class="line" d="M840 270 H885"/>
+  <path class="line" d="M540 225 V345"/>
+  <text x="710" y="179" class="small">read and write</text>
+  <text x="674" y="235" class="small">publish</text>
+  <text x="690" y="388" class="small">Errors alarm reports failed invocations.</text>
+  <text x="690" y="410" class="small">CloudFormation creates the stack.</text>
+</svg>
