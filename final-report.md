@@ -56,6 +56,3 @@ I would add user authentication and a status-update route. I would test table ba
 
 The appendix shows CloudFormation CREATE_COMPLETE, the saved DynamoDB item, the delivered SQS event, and a successful Lambda lookup with my name in the response. The CloudFormation Outputs screenshot records the API URL. The stack was still running at the time of this report so the live API remained available for review.
 
-## AI-use note
-
-I used Codex to help draft source code, tests, the infrastructure template, the diagram, and report wording. I reviewed the design and verified the AWS results in my account.
