@@ -48,7 +48,3 @@ Run `python3 -m unittest -v test_app.py` from this directory. The tests use fake
 ## Cost and cleanup
 
 DynamoDB uses on-demand billing. Lambda and API Gateway charge by requests and compute usage. SNS, SQS, and CloudWatch also have usage-based charges. The test used a few requests and a short deployment window. The [AWS Pricing Calculator estimate](assets/aws-pricing-estimate.pdf), exported October 25, 2026, is $0.11 per month for the stated low-usage assumptions in us-west-2. This is an estimate, not a bill. The account bill includes other work, so I do not assign its total to this project. Delete the stack after screenshots and tests.
-
-## AI-use note
-
-I used Codex to help draft the application code, CloudFormation template, diagram, README, local tests, and wording. I reviewed the architecture choices and verified the AWS results in my account.
